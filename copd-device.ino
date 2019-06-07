@@ -13,7 +13,7 @@ File logfile;
 uint32_t syncTime = 0;
 
 //Bluetooth libraries en objecten
-#include <Adafruit_BluefruitLE_UART.h>
+#include "Adafruit_BluefruitLE_UART.h"
 #include "BluefruitConfig.h"
 #define FACTORYRESET_ENABLE         0
 #define MINIMUM_FIRMWARE_VERSION    "0.6.6"
@@ -22,11 +22,11 @@ SoftwareSerial bluefruitSS = SoftwareSerial(BLUEFRUIT_SWUART_TXD_PIN, BLUEFRUIT_
 Adafruit_BluefruitLE_UART ble(bluefruitSS, BLUEFRUIT_UART_MODE_PIN, BLUEFRUIT_UART_CTS_PIN, BLUEFRUIT_UART_RTS_PIN);
 
 //fijnstof libraries en objecten
-#include <sps30.h>
+#include "sps30.h"
 struct sps30_measurement measurement;
 
 //temp&humidity  libraries en objecten
-#include <Adafruit_Si7021.h>
+#include "Adafruit_Si7021.h"
 Adafruit_Si7021 sensor = Adafruit_Si7021();
 
 #define debug
@@ -40,7 +40,7 @@ Adafruit_Si7021 sensor = Adafruit_Si7021();
 
 void error(const char* str)
 {
-  LOGLN("error: " + str);
+  LOGLN(str);
   while (1);
 }
 
@@ -56,10 +56,10 @@ void setup(void)
   //Initialiseer SD kaart
   LOGLN(F("Initializing SD card..."));
   pinMode(10, OUTPUT);
-  if (!SD.begin(10)) error(F("Card failed, or not present"));
+  if (!SD.begin(10)) error("Card failed, or not present");
   LOGLN(F("card initialized."));
   Wire.begin();
-  if (!RTC.begin()) error(F("RTC failed"));
+  if (!RTC.begin()) error("RTC failed");
   for (uint8_t i = 0; i < 100; i++)
   {
     filename[6] = i / 10 + '0';
@@ -70,24 +70,24 @@ void setup(void)
       break;
     }
   }
-  if (!logfile) error(F("couldnt create file"));
+  if (!logfile) error("couldnt create file");
   LOG(F("Logging to: "));
   LOGLN(filename);
   analogReference(EXTERNAL);
 
   //Initialiseer SI7021 sensor
-  if (!sensor.begin()) error(F("Did not find Si7021 sensor!"));
+  if (!sensor.begin()) error("Did not find Si7021 sensor!");
 
   //Initialiseer sps30 sensor
   while  (sps30_probe() != 0) LOGLN(F("Could not probe sps30!"));
-  if  (sps30_start_measurement() != 0) error(F("Could not start sps30 measurement!"));
+  if  (sps30_start_measurement() != 0) error("Could not start sps30 measurement!");
   delay(10000);
 
   
   
   //Initialiseer Bluetooth
-  if ( !ble.begin(VERBOSE_MODE) ) error(F("Couldn't find Bluefruit, make sure it's in CoMmanD mode & check wiring?"));
-  if (FACTORYRESET_ENABLE) if ( ! ble.factoryReset() ) error(F("Couldn't factory reset"));
+  if ( !ble.begin(VERBOSE_MODE) ) error("Couldn't find Bluefruit, make sure it's in CoMmanD mode & check wiring?");
+  if (FACTORYRESET_ENABLE) if ( ! ble.factoryReset() ) error("Couldn't factory reset");
   ble.echo(false);
   ble.info(); //print bluetooth info
   ble.verbose(false); //disable debug

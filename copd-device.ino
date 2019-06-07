@@ -2,7 +2,7 @@
 #include <SPI.h>
 #include <SD.h>
 #include <Wire.h>
-#include "RTClib.h"
+#include <RTClib.h>
 char filename[] = "LOGGER00.CSV";
 DateTime now;
 String Time;
@@ -13,7 +13,7 @@ File logfile;
 uint32_t syncTime = 0;
 
 //Bluetooth libraries en objecten
-#include "Adafruit_BluefruitLE_UART.h"
+#include <Adafruit_BluefruitLE_UART.h>
 #include "BluefruitConfig.h"
 #define FACTORYRESET_ENABLE         0
 #define MINIMUM_FIRMWARE_VERSION    "0.6.6"
@@ -22,12 +22,16 @@ SoftwareSerial bluefruitSS = SoftwareSerial(BLUEFRUIT_SWUART_TXD_PIN, BLUEFRUIT_
 Adafruit_BluefruitLE_UART ble(bluefruitSS, BLUEFRUIT_UART_MODE_PIN, BLUEFRUIT_UART_CTS_PIN, BLUEFRUIT_UART_RTS_PIN);
 
 //fijnstof libraries en objecten
-#include "sps30.h"
+#include <sps30.h>
 struct sps30_measurement measurement;
 
 //temp&humidity  libraries en objecten
-#include "Adafruit_Si7021.h"
-Adafruit_Si7021 sensor = Adafruit_Si7021();
+//#include <Adafruit_Si7021.h>
+//Adafruit_Si7021 sensor = Adafruit_Si7021();
+
+//UV libraries en objecten
+#include <SparkFun_VEML6075_Arduino_Library.h>
+VEML6075 uv; // Create a VEML6075 object 
 
 #define debug
 #ifdef debug
@@ -76,7 +80,10 @@ void setup(void)
   analogReference(EXTERNAL);
 
   //Initialiseer SI7021 sensor
-  if (!sensor.begin()) error("Did not find Si7021 sensor!");
+  //if (!sensor.begin()) error("Did not find Si7021 sensor!");
+
+  //Initialiseer Uv sensor
+  if (uv.begin() == false) error("Unable to communicate with VEML6075.");
 
   //Initialiseer sps30 sensor
   while  (sps30_probe() != 0) LOGLN(F("Could not probe sps30!"));
@@ -96,11 +103,6 @@ void setup(void)
 
 }
 
-
-
-
-
-
 void loop(void)
 {
   now = RTC.now();
@@ -114,11 +116,13 @@ void loop(void)
     }
     logfile.close();
     while (ble.isConnected()) {
-      ble.print(Time + ',' + "Temperature," + sensor.readTemperature() + '\n');
-      LOG(Time + ',' + "Temperature," + sensor.readTemperature() + '\n');
-      ble.print(Time + ',' + "Humidity," + sensor.readHumidity() + '\n');
-      LOG(Time + ',' + "Humidity," + sensor.readHumidity() + '\n');
-      ble.print(Time + ',' + "Particulate matter," + (String(measurement.mc_1p0, 4) + ";" + String(measurement.mc_2p5, 4) + ";" + String(measurement.mc_4p0, 4) + ";" + String(measurement.mc_10p0, 4)));
+      //ble.print(Time + ',' + ",Temperature," + sensor.readTemperature() + '\n');
+      //LOG(Time + ",Temperature," + sensor.readTemperature() + '\n');
+      //ble.print(Time + ",Humidity," + sensor.readHumidity() + '\n');
+      //LOG(Time +",Humidity," + sensor.readHumidity() + '\n');
+      ble.print(Time + ",UV-B," + String(uv.uvb()) + '\n');
+      LOG(Time + ",UV-B," + String(uv.uvb()) + '\n');
+      ble.print(Time + ",Particulate matter," + (String(measurement.mc_1p0, 4) + ";" + String(measurement.mc_2p5, 4) + ";" + String(measurement.mc_4p0, 4) + ";" + String(measurement.mc_10p0, 4)));
     }
     SD.remove(filename);
     logfile = SD.open(filename, FILE_WRITE);
@@ -126,8 +130,9 @@ void loop(void)
 
   else
   {
-    Write(String(sensor.readTemperature()).c_str(), "Temperature");
-    Write(String(sensor.readHumidity()).c_str(), "Humidity");
+    //Write(String(sensor.readTemperature()), "Temperature");
+    //Write(String(sensor.readHumidity()), "Humidity");
+    Write(String(uv.uvb()), "UV-B");
     if (ret >= 0) Write((String(measurement.mc_1p0, 4) + ";" + String(measurement.mc_2p5, 4) + ";" + String(measurement.mc_4p0, 4) + ";" + String(measurement.mc_10p0, 4)).c_str(), "Particulate matter");
     // Now we write data to disk! Don't sync too often - requires 2048 bytes of I/O to SD card
     // which uses a bunch of power and takes time
@@ -138,7 +143,7 @@ void loop(void)
   }
 }
 
-void Write(const char* toWrite, const char* sensor)
+void Write(String toWrite, String sensor)
 {
   LOG(Time);
   LOG(',' + sensor + ',');

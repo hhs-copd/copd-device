@@ -1,1 +1,0 @@
-# copd-device

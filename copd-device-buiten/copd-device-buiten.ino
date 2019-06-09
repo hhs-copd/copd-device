@@ -1,7 +1,7 @@
 //SD libraries en objecten
 #include <SPI.h>
-#include <SD.h>
 #include <Wire.h>
+#include <SD.h>
 #include <RTClib.h>
 char filename[] = "LOGGER00.CSV";
 DateTime now;
@@ -26,12 +26,12 @@ Adafruit_BluefruitLE_UART ble(bluefruitSS, BLUEFRUIT_UART_MODE_PIN, BLUEFRUIT_UA
 struct sps30_measurement measurement;
 
 //temp&humidity  libraries en objecten
-//#include <Adafruit_Si7021.h>
-//Adafruit_Si7021 sensor = Adafruit_Si7021();
+#include <Adafruit_Si7021.h>
+Adafruit_Si7021 sensor = Adafruit_Si7021();
 
 //UV libraries en objecten
 #include <SparkFun_VEML6075_Arduino_Library.h>
-VEML6075 uv; // Create a VEML6075 object 
+VEML6075 uv; 
 
 #define debug
 #ifdef debug
@@ -60,7 +60,7 @@ void setup(void)
   //Initialiseer SD kaart
   LOGLN(F("Initializing SD card..."));
   pinMode(10, OUTPUT);
-  if (!SD.begin(10)) error("Card failed, or not present");
+  if (!SD.begin(10, 11, 12, 13)) error("Card failed, or not present");
   LOGLN(F("card initialized."));
   Wire.begin();
   if (!RTC.begin()) error("RTC failed");
@@ -80,11 +80,12 @@ void setup(void)
   analogReference(EXTERNAL);
 
   //Initialiseer SI7021 sensor
-  //if (!sensor.begin()) error("Did not find Si7021 sensor!");
+  if (!sensor.begin()) error("Did not find Si7021 sensor!");
 
   //Initialiseer Uv sensor
-  if (uv.begin() == false) error("Unable to communicate with VEML6075.");
-
+  //if (uv.begin() == false) error("Unable to communicate with VEML6075.");
+    
+  Serial1.begin(115200);
   //Initialiseer sps30 sensor
   while  (sps30_probe() != 0) LOGLN(F("Could not probe sps30!"));
   if  (sps30_start_measurement() != 0) error("Could not start sps30 measurement!");
@@ -116,12 +117,12 @@ void loop(void)
     }
     logfile.close();
     while (ble.isConnected()) {
-      //ble.print(Time + ',' + ",Temperature," + sensor.readTemperature() + '\n');
-      //LOG(Time + ",Temperature," + sensor.readTemperature() + '\n');
-      //ble.print(Time + ",Humidity," + sensor.readHumidity() + '\n');
-      //LOG(Time +",Humidity," + sensor.readHumidity() + '\n');
-      ble.print(Time + ",UV-B," + String(uv.uvb()) + '\n');
-      LOG(Time + ",UV-B," + String(uv.uvb()) + '\n');
+      ble.print(Time + ",Temperature," + sensor.readTemperature() + '\n');
+      LOG(Time + ",Temperature," + sensor.readTemperature() + '\n');
+      ble.print(Time + ",Humidity," + sensor.readHumidity() + '\n');
+      LOG(Time +",Humidity," + sensor.readHumidity() + '\n');
+      //ble.print(Time + ",UV-B," + String(uv.uvb()) + '\n');
+      //LOG(Time + ",UV-B," + String(uv.uvb()) + '\n');
       ble.print(Time + ",Particulate matter," + (String(measurement.mc_1p0, 4) + ";" + String(measurement.mc_2p5, 4) + ";" + String(measurement.mc_4p0, 4) + ";" + String(measurement.mc_10p0, 4)));
     }
     SD.remove(filename);

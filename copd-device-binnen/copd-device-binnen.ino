@@ -23,7 +23,7 @@ Adafruit_BluefruitLE_UART ble(bluefruitSS, BLUEFRUIT_UART_MODE_PIN, BLUEFRUIT_UA
 
 //Stretch sensor libraries en objecten
 #include "Stretch.h"
-#define REKPIN A0
+#define REKPIN A8
 String inputString = "";
 StretchSensor S(REKPIN);
 
@@ -69,8 +69,7 @@ void setup(void)
 
   //Initialiseer SD kaart
   LOGLN(F("Initializing SD card..."));
-  pinMode(10, OUTPUT);
-  if (!SD.begin(10, 11, 12, 13)) error("Card failed, or not present");
+  if (!SD.begin(10)) error("Card failed, or not present");
   LOGLN(F("card initialized."));
   Wire.begin();
   RTC.begin(DateTime(F(__DATE__), F(__TIME__)));
@@ -90,7 +89,9 @@ void setup(void)
   analogReference(EXTERNAL);
 
   //Initialiseer Bluetooth
-  if ( !ble.begin(VERBOSE_MODE) ) error("Couldn't find Bluefruit, make sure it's in CoMmanD mode & check wiring?");
+  Serial.println("Initialising Bluetooth module");
+  ble.begin(VERBOSE_MODE);
+  //if ( !ble.begin(VERBOSE_MODE) ) error("Couldn't find Bluefruit, make sure it's in CoMmanD mode & check wiring?");
   if (FACTORYRESET_ENABLE) if ( ! ble.factoryReset() ) error("Couldn't factory reset");
   ble.echo(false);
   ble.info(); //print bluetooth info
@@ -98,16 +99,17 @@ void setup(void)
   if ( ble.isVersionAtLeast(MINIMUM_FIRMWARE_VERSION) ) ble.sendCommandCheckOK("AT+HWModeLED=" MODE_LED_BEHAVIOUR); // Change Mode LED Activity // LED Activity command is only supported from 0.6.6
   ble.setMode(BLUEFRUIT_MODE_DATA); // Set module to DATA mode
 
-  //initialiseer stretch sensor
-  inputString.reserve(5);
-  S.calibrate();
-
   //initialiseer max30105
+  Serial.println("Initialising Max30105");
   if (!particleSensor.begin(Wire, I2C_SPEED_FAST)) error("MAX30105 was not found. Please check wiring/power.");//Use default I2C port, 400kHz speed
   particleSensor.setup(); //Configure sensor with default settings
   particleSensor.setPulseAmplitudeRed(0x0A); //Turn Red LED to low to indicate sensor is running
   particleSensor.setPulseAmplitudeGreen(0); //Turn off Green LED
 
+  //initialiseer stretch sensor
+  Serial.println("Initialising Stretch Sensor");
+  inputString.reserve(5);
+  //S.calibrate();
 }
 
 void loop(void)
@@ -118,7 +120,11 @@ void loop(void)
   
   CheckForCalibration();
   CheckForHeartBeat(irValue);
-  if (ble.isConnected()) SendDataViaBluetooth();
+  Serial.println("Bluetooth connected: " + String(ble.isConnected()));
+  if (ble.isConnected()) {
+    LOGLN("1111111");
+    SendDataViaBluetooth();
+  }
   else WriteDataToSdCard();
 }
 
@@ -139,9 +145,10 @@ void SendDataViaBluetooth(){
     }
     logfile.close();
     while (ble.isConnected()) {
+      LOGLN("22222222");
       ble.print(Time + ",Thorax circumference," + String(analogRead(REKPIN)) + '\n');
       LOG(Time + ",Thorax circumference," + String(analogRead(REKPIN)) + '\n');
-      if (irValue > 50000) ble.print(Time + ",Heartrate," + String(beatAvg) + '\n');
+      if (irValue > 50000) ble.print(Time + ",Heartrate," + String(beatsPerMinute) + '\n');
     }
     SD.remove(filename);
     logfile = SD.open(filename, FILE_WRITE);

@@ -8,7 +8,7 @@ DateTime now;
 String Time;
 #define SYNC_INTERVAL 1000
 #define WAIT_TO_START 0
-RTC_DS1307 RTC;
+RTC_Millis RTC;
 File logfile;
 uint32_t syncTime = 0;
 
@@ -24,7 +24,8 @@ Adafruit_BluefruitLE_UART ble(bluefruitSS, BLUEFRUIT_UART_MODE_PIN, BLUEFRUIT_UA
 //Stretch sensor libraries en objecten
 #include "Stretch.h"
 #define REKPIN A0
-StretchSensor StretchSensor(REKPIN);
+String inputString = "";
+StretchSensor S(REKPIN);
 
 //Max30105 libraries en objecten
 #include <Wire.h>
@@ -37,6 +38,7 @@ const byte RATE_SIZE = 4; //Increase this for more averaging. 4 is good.
 byte rates[RATE_SIZE]; //Array of heart rates
 byte rateSpot = 0;
 long lastBeat = 0; //Time at which the last beat occurred
+long irValue;
 
 float beatsPerMinute;
 int beatAvg;
@@ -71,7 +73,7 @@ void setup(void)
   if (!SD.begin(10, 11, 12, 13)) error("Card failed, or not present");
   LOGLN(F("card initialized."));
   Wire.begin();
-  if (!RTC.begin()) error("RTC failed");
+  RTC.begin(DateTime(F(__DATE__), F(__TIME__)));
   for (uint8_t i = 0; i < 100; i++)
   {
     filename[6] = i / 10 + '0';
@@ -97,20 +99,63 @@ void setup(void)
   ble.setMode(BLUEFRUIT_MODE_DATA); // Set module to DATA mode
 
   //initialiseer stretch sensor
-  StretchSensor.calibrate();
+  inputString.reserve(5);
+  S.calibrate();
 
   //initialiseer max30105
   if (!particleSensor.begin(Wire, I2C_SPEED_FAST)) error("MAX30105 was not found. Please check wiring/power.");//Use default I2C port, 400kHz speed
   particleSensor.setup(); //Configure sensor with default settings
   particleSensor.setPulseAmplitudeRed(0x0A); //Turn Red LED to low to indicate sensor is running
   particleSensor.setPulseAmplitudeGreen(0); //Turn off Green LED
+
 }
 
 void loop(void)
 {
   now = RTC.now();
   Time = '"' + String(now.hour(), DEC) + ':' + String(now.minute(), DEC) + ':' + String(now.second(), DEC) + '"';
-  long irValue = particleSensor.getIR();
+  irValue = particleSensor.getIR();
+  
+  CheckForCalibration();
+  CheckForHeartBeat(irValue);
+  if (ble.isConnected()) SendDataViaBluetooth();
+  else WriteDataToSdCard();
+}
+
+void WriteDataToSdCard(){
+  if (irValue > 50000) Write(String(beatAvg), "Heartrate");
+    Write(String(analogRead(REKPIN)), "Thorax circumference");
+    if ((millis() - syncTime) < SYNC_INTERVAL)
+      return;
+    syncTime = millis();
+    logfile.flush();
+}
+
+void SendDataViaBluetooth(){
+  logfile.close();
+    logfile = SD.open(filename);
+    while (logfile.available()) {
+      ble.print(logfile.readStringUntil('\n'));
+    }
+    logfile.close();
+    while (ble.isConnected()) {
+      ble.print(Time + ",Thorax circumference," + String(analogRead(REKPIN)) + '\n');
+      LOG(Time + ",Thorax circumference," + String(analogRead(REKPIN)) + '\n');
+      if (irValue > 50000) ble.print(Time + ",Heartrate," + String(beatAvg) + '\n');
+    }
+    SD.remove(filename);
+    logfile = SD.open(filename, FILE_WRITE);
+}
+
+
+void CheckForCalibration(){
+  if (inputString == "&c") {
+    S.calibrate();
+    inputString = "";
+  }
+}
+
+void CheckForHeartBeat(long irValue){
   if (checkForBeat(irValue) == true)
   {
     //We sensed a beat!
@@ -131,32 +176,8 @@ void loop(void)
       beatAvg /= RATE_SIZE;
     }
   }
-  if (ble.isConnected()) {
-    logfile.close();
-    logfile = SD.open(filename);
-    while (logfile.available()) {
-      ble.print(logfile.readStringUntil('\n'));
-    }
-    logfile.close();
-    while (ble.isConnected()) {
-      ble.print(Time + ",Thorax circumference," + String(analogRead(REKPIN)) + '\n');
-      LOG(Time + ",Thorax circumference," + String(analogRead(REKPIN)) + '\n');
-      if (irValue > 50000) ble.print(Time + ",Heartrate," + String(beatAvg) + '\n');
-    }
-    SD.remove(filename);
-    logfile = SD.open(filename, FILE_WRITE);
-  }
-
-  else
-  {
-    if (irValue > 50000) Write(String(beatAvg), "Heartrate");
-    Write(String(analogRead(REKPIN)), "Thorax circumference");
-    if ((millis() - syncTime) < SYNC_INTERVAL)
-      return;
-    syncTime = millis();
-    logfile.flush();
-  }
 }
+
 
 void Write(String toWrite, String sensor)
 {

@@ -11,7 +11,8 @@ class StretchSensor {
   public:
     StretchSensor(int);
     void calibrate();
-  
+    void printValue();
+    
   private:
     void setLow();
     void setHigh();

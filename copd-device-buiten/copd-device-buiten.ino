@@ -60,7 +60,7 @@ void setup(void)
   //Initialiseer SD kaart
   LOGLN(F("Initializing SD card..."));
   pinMode(10, OUTPUT);
-  if (!SD.begin(10, 11, 12, 13)) error("Card failed, or not present");
+  if (!SD.begin(10/*, 11, 12, 13*/)) error("Card failed, or not present");
   LOGLN(F("card initialized."));
   Wire.begin();
   if (!RTC.begin()) error("RTC failed");

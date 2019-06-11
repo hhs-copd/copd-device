@@ -6,11 +6,10 @@
 char filename[] = "LOGGER00.CSV";
 DateTime now;
 String Time;
-#define SYNC_INTERVAL 1000
 #define WAIT_TO_START 0
 RTC_Millis RTC;
 File logfile;
-uint32_t syncTime = 0;
+unsigned long lastcheck = 0;
 
 //Bluetooth libraries en objecten
 #include <Adafruit_BluefruitLE_UART.h>
@@ -18,8 +17,10 @@ uint32_t syncTime = 0;
 #define FACTORYRESET_ENABLE         0
 #define MINIMUM_FIRMWARE_VERSION    "0.6.6"
 #define MODE_LED_BEHAVIOUR          "MODE"
-SoftwareSerial bluefruitSS = SoftwareSerial(BLUEFRUIT_SWUART_TXD_PIN, BLUEFRUIT_SWUART_RXD_PIN);
-Adafruit_BluefruitLE_UART ble(bluefruitSS, BLUEFRUIT_UART_MODE_PIN, BLUEFRUIT_UART_CTS_PIN, BLUEFRUIT_UART_RTS_PIN);
+#define BLUEFRUIT_HWSERIAL_NAME      Serial1
+Adafruit_BluefruitLE_UART ble(BLUEFRUIT_HWSERIAL_NAME , BLUEFRUIT_UART_MODE_PIN);
+unsigned long millisconnected = 0;
+unsigned long millisdisconnected = 0;
 
 //Stretch sensor libraries en objecten
 #include "Stretch.h"
@@ -112,57 +113,80 @@ void setup(void)
   //S.calibrate();
 }
 
+
+
+
+
+
 void loop(void)
 {
-  now = RTC.now();
-  Time = '"' + String(now.hour(), DEC) + ':' + String(now.minute(), DEC) + ':' + String(now.second(), DEC) + '"';
-  irValue = particleSensor.getIR();
-  
-  CheckForCalibration();
-  CheckForHeartBeat(irValue);
-  Serial.println("Bluetooth connected: " + String(ble.isConnected()));
-  if (ble.isConnected()) {
-    LOGLN("1111111");
-    SendDataViaBluetooth();
+  if (millis() - lastcheck >= 1000) {
+    lastcheck = millis();
+    Time = RTC.now().unixtime();
+    irValue = particleSensor.getIR();
+
+    CheckForCalibration();
+    CheckForHeartBeat(irValue);
+    Serial.println("Bluetooth connected: " + String(ble.isConnected()));
+    if (ble.isConnected()) SendDataViaBluetooth();
+    else WriteDataToSdCard();
   }
-  else WriteDataToSdCard();
 }
 
-void WriteDataToSdCard(){
+
+
+
+
+void WriteDataToSdCard() {
+  LOGLN("Bezig met naar kaart");
   if (irValue > 50000) Write(String(beatAvg), "Heartrate");
-    Write(String(analogRead(REKPIN)), "Thorax circumference");
-    if ((millis() - syncTime) < SYNC_INTERVAL)
-      return;
-    syncTime = millis();
-    logfile.flush();
+  Write(String(analogRead(REKPIN)), "Thorax circumference");
+  logfile.flush();
 }
 
-void SendDataViaBluetooth(){
-  logfile.close();
+void SendDataViaBluetooth() {
+  unsigned long BTTimer = millis();
+  while ((millis() - BTTimer) < 10000) {
+    Time = RTC.now().unixtime();
+    WriteDataToSdCard();
+    delay(1000);
+  }
+  while (ble.isConnected()) {
+    logfile.close();
     logfile = SD.open(filename);
     while (logfile.available()) {
-      ble.print(logfile.readStringUntil('\n'));
+      String Data = logfile.readStringUntil('\n');
+      LOGLN("Bezig met bestand");
+      LOGLN(Data);
+      ble.print(Data);
+      delay(50);
     }
-    logfile.close();
-    while (ble.isConnected()) {
-      LOGLN("22222222");
-      ble.print(Time + ",Thorax circumference," + String(analogRead(REKPIN)) + '\n');
-      LOG(Time + ",Thorax circumference," + String(analogRead(REKPIN)) + '\n');
-      if (irValue > 50000) ble.print(Time + ",Heartrate," + String(beatsPerMinute) + '\n');
+    if (SD.exists(filename)) {
+      logfile.close();
+      SD.remove(filename);
     }
-    SD.remove(filename);
-    logfile = SD.open(filename, FILE_WRITE);
+    LOGLN("Bezig met live");
+    Time = '"' + RTC.now().unixtime() + '"';
+    ble.print(Time + ",Thorax circumference," + String(analogRead(REKPIN)) + '\n');
+    LOG(Time + ",Thorax circumference," + String(analogRead(REKPIN)) + '\n');
+    if (irValue > 50000) {
+      ble.print(Time + ",Heartrate," + String(beatsPerMinute) + '\n');
+      LOG(Time + ",Heartrate," + String(beatsPerMinute) + '\n');
+    }
+    delay(1000);
+  }
+  SD.open(filename, FILE_WRITE);
 }
 
 
-void CheckForCalibration(){
+void CheckForCalibration() {
   if (inputString == "&c") {
     S.calibrate();
     inputString = "";
   }
 }
 
-void CheckForHeartBeat(long irValue){
+void CheckForHeartBeat(long irValue) {
   if (checkForBeat(irValue) == true)
   {
     //We sensed a beat!

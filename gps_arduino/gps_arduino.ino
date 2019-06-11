@@ -1,37 +1,39 @@
 #include <TinyGPS++.h>
 #include <SoftwareSerial.h>
 
-#define RXPin 4
-#define TXPin 3
 #define GPSBaud 9600
 
 // The TinyGPS++ object
 TinyGPSPlus gps;
 
 // The serial connection to the GPS device
-SoftwareSerial ss(RXPin, TXPin);
+//SoftwareSerial ss(RXPin, TXPin);
+int currentTime;
 
 void setup()
 {
-  pinMode(RXPin, INPUT);
-  pinMode(TXPin, OUTPUT);
   Serial.begin(115200);
-  ss.begin(GPSBaud);
+  Serial2.begin(GPSBaud);
 
   Serial.println(F("DeviceExample.ino"));
   Serial.println(F("A simple demonstration of TinyGPS++ with an attached GPS module"));
   Serial.print(F("Testing TinyGPS++ library v. ")); Serial.println(TinyGPSPlus::libraryVersion());
   Serial.println(F("by Mikal Hart"));
   Serial.println();
+  currentTime = millis();
 }
 
 void loop()
 {
   // This sketch displays information every time a new sentence is correctly encoded.
-  while (ss.available() > 0)
-    if (gps.encode(ss.read()))
-      displayInfo();
-
+  while (Serial2.available() > 0){
+    if(millis() - 1000 > currentTime)
+      if (gps.encode(Serial2.read())){
+        displayInfo();
+        currentTime = millis();
+      }
+  }
+  
   if (millis() > 5000 && gps.charsProcessed() < 10)
   {
     Serial.println(F("No GPS detected: check wiring."));

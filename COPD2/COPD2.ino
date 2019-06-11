@@ -1,31 +1,33 @@
-#include "src/SPS30.h"
-#include "src/VEML6075.h"
-#include "src/si7021.h"
-#include "src/SDLogger.h"
-#include "src/RTC.h"
+#include "SPS30.h"
+#include "VEML6075.h"
+#include "si7021.h"
+#include "GPSReader.h"
+#include "SDLogger.h"
+#include "RTC.h"
 
-#include <TinyGPS++.h>
 #include <SoftwareSerial.h>
 #include <Adafruit_BluefruitLE_UART.h>
 #include "shared/BluefruitConfig.h"
 
-#define RXPin 4
-#define TXPin 3
+
 #define GPSBaud 9600
 #define FACTORYRESET_ENABLE         0
 #define MINIMUM_FIRMWARE_VERSION    "0.6.6"
 #define MODE_LED_BEHAVIOUR          "MODE"
-#define BLUEFRUIT_HWSERIAL_NAME      Serial1
+#define BLUEFRUIT_HWSERIAL_NAME     Serial1
+#define GPS_HWSERIAL_NAME           Serial2 
 
-TinyGPSPlus gps;
+
 Adafruit_BluefruitLE_UART ble(BLUEFRUIT_HWSERIAL_NAME, BLUEFRUIT_UART_MODE_PIN);
 unsigned long Time;
+unsigned long GPSTime;
 
 union LogVars
 {
   char VEML6075Log[200];
   char si7021Log[200];
   char SPS30Log[200];
+  char GPSLog[200];
 } l1;
 
 //#define SetTime
@@ -42,12 +44,7 @@ void setup() {
   si7021Init();
   SPS30Init();
 
-  Serial2.begin(GPSBaud);
-  Serial.println(F("DeviceExample.ino"));
-  Serial.println(F("A simple demonstration of TinyGPS++ with an attached GPS module"));
-  Serial.print(F("Testing TinyGPS++ library v. ")); Serial.println(TinyGPSPlus::libraryVersion());
-  Serial.println(F("by Mikal Hart"));
-  Serial.println();
+  GPS_HWSERIAL_NAME.begin(GPSBaud);
 
   if ( !ble.begin(VERBOSE_MODE) ) Serial.println("Couldn't find Bluefruit, make sure it's in CoMmanD mode & check wiring?");
   if (FACTORYRESET_ENABLE) if ( ! ble.factoryReset() ) Serial.println("Couldn't factory reset");
@@ -58,11 +55,11 @@ void setup() {
   ble.setMode(BLUEFRUIT_MODE_DATA); // Set module to DATA mode
 
   Time = millis();
+  GPSTime = millis();
   delay(1000);
 }
 
 void loop() {
-
   if (millis() > Time + 1000) {
     VEML6075Read().toCharArray(l1.VEML6075Log, sizeof(l1.VEML6075Log));
     Serial.println(l1.VEML6075Log);
@@ -75,22 +72,27 @@ void loop() {
     SPS30Read().toCharArray(l1.SPS30Log, sizeof(l1.SPS30Log));
     Serial.println(l1.SPS30Log);
     SDLoggerWrite(l1.SPS30Log);
+    
 
+    //get GPS data
+    while(GPS_HWSERIAL_NAME.available() > 0)
+    
+      if (GPSCheck() && millis() > GPSTime + 1000){
+        GPSRead().toCharArray(l1.GPSLog, sizeof(l1.GPSLog));
+        Serial.println(l1.GPSLog);
+        SDLoggerWrite(l1.GPSLog);
+        GPSTime = millis();
+      }
+
+    if (millis() > 5000 && gpsChars() < 10){
+      Serial.println(F("No GPS detected: check wiring."));
+      while(true);
+    }
     Time = millis();
-  }
-
-  while (Serial2.available() > 0)
-    if (gps.encode(Serial2.read()))
-      displayInfo();
-
-  if (millis() > 5000 && gps.charsProcessed() < 10)
-  {
-    Serial.println(F("No GPS detected: check wiring."));
-    while (true);
   }
 }
 
-void displayInfo()
+/*void GPSInfo()
 {
   Serial.print(F("Location: "));
   if (gps.location.isValid())
@@ -139,4 +141,4 @@ void displayInfo()
   }
 
   Serial.println();
-}
+}*/

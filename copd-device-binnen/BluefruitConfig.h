@@ -12,10 +12,10 @@
 // You should use this option if you are connecting the UART Friend to an UNO
 // ----------------------------------------------------------------------------------------------
 #define BLUEFRUIT_UART_MODE_PIN        14    // Set to -1 if unused, its recommended but not required
-#define BLUEFRUIT_UART_CTS_PIN         15   // Required for software serial!
-#define BLUEFRUIT_SWUART_RXD_PIN       16    // Required for software serial!
-#define BLUEFRUIT_SWUART_TXD_PIN       17  // Required for software serial!
-#define BLUEFRUIT_UART_RTS_PIN         18   // Optional, set to -1 if unused
+//#define BLUEFRUIT_UART_CTS_PIN         15   // Required for software serial!
+//#define BLUEFRUIT_SWUART_RXD_PIN       18    // Required for software serial!
+//#define BLUEFRUIT_SWUART_TXD_PIN       19  // Required for software serial!
+//#define BLUEFRUIT_UART_RTS_PIN         18   // Optional, set to -1 if unused
 
 
 // HARDWARE UART SETTINGS

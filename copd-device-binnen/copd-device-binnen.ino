@@ -28,21 +28,23 @@ unsigned long millisdisconnected = 0;
 String inputString = "";
 StretchSensor S(REKPIN);
 
-//Max30105 libraries en objecten
-#include <Wire.h>
-#include "MAX30105.h"
+//IMU libraries en objecten
+#include "Registers.h"
+typedef union accel_t_gyro_union
+{
+  struct
+  {
+    uint8_t x_accel_h;uint8_t x_accel_l;uint8_t y_accel_h;uint8_t y_accel_l;uint8_t z_accel_h;uint8_t z_accel_l;uint8_t t_h;
+    uint8_t t_l;uint8_t x_gyro_h;uint8_t x_gyro_l;uint8_t y_gyro_h;uint8_t y_gyro_l;uint8_t z_gyro_h;uint8_t z_gyro_l;
+    } reg;
+  struct
+  {
+    int16_t x_accel;int16_t y_accel;int16_t z_accel;int16_t temperature;int16_t x_gyro;int16_t y_gyro;int16_t z_gyro;
+  } value;
+};
 
-#include "heartRate.h"
 
-MAX30105 particleSensor;
-const byte RATE_SIZE = 4; //Increase this for more averaging. 4 is good.
-byte rates[RATE_SIZE]; //Array of heart rates
-byte rateSpot = 0;
-long lastBeat = 0; //Time at which the last beat occurred
-long irValue;
 
-float beatsPerMinute;
-int beatAvg;
 
 #define debug
 #ifdef debug
@@ -100,33 +102,18 @@ void setup(void)
   if ( ble.isVersionAtLeast(MINIMUM_FIRMWARE_VERSION) ) ble.sendCommandCheckOK("AT+HWModeLED=" MODE_LED_BEHAVIOUR); // Change Mode LED Activity // LED Activity command is only supported from 0.6.6
   ble.setMode(BLUEFRUIT_MODE_DATA); // Set module to DATA mode
 
-  //initialiseer max30105
-  Serial.println("Initialising Max30105");
-  if (!particleSensor.begin(Wire, I2C_SPEED_FAST)) error("MAX30105 was not found. Please check wiring/power.");//Use default I2C port, 400kHz speed
-  particleSensor.setup(); //Configure sensor with default settings
-  particleSensor.setPulseAmplitudeRed(0x0A); //Turn Red LED to low to indicate sensor is running
-  particleSensor.setPulseAmplitudeGreen(0); //Turn off Green LED
-
   //initialiseer stretch sensor
   Serial.println("Initialising Stretch Sensor");
   inputString.reserve(5);
   //S.calibrate();
 }
 
-
-
-
-
-
 void loop(void)
 {
-  if (millis() - lastcheck >= 1000) {
+  if (millis() - lastcheck >= 500) {
     lastcheck = millis();
     Time = RTC.now().unixtime();
-    irValue = particleSensor.getIR();
-
     CheckForCalibration();
-    CheckForHeartBeat(irValue);
     Serial.println("Bluetooth connected: " + String(ble.isConnected()));
     if (ble.isConnected()) SendDataViaBluetooth();
     else WriteDataToSdCard();
@@ -134,12 +121,8 @@ void loop(void)
 }
 
 
-
-
-
 void WriteDataToSdCard() {
   LOGLN("Bezig met naar kaart");
-  if (irValue > 50000) Write(String(beatAvg), "Heartrate");
   Write(String(analogRead(REKPIN)), "Thorax circumference");
   logfile.flush();
 }
@@ -166,13 +149,9 @@ void SendDataViaBluetooth() {
       SD.remove(filename);
     }
     LOGLN("Bezig met live");
-    Time = '"' + RTC.now().unixtime() + '"';
+    Time = RTC.now().unixtime();
     ble.print(Time + ",Thorax circumference," + String(analogRead(REKPIN)) + '\n');
     LOG(Time + ",Thorax circumference," + String(analogRead(REKPIN)) + '\n');
-    if (irValue > 50000) {
-      ble.print(Time + ",Heartrate," + String(beatsPerMinute) + '\n');
-      LOG(Time + ",Heartrate," + String(beatsPerMinute) + '\n');
-    }
     delay(1000);
   }
   SD.open(filename, FILE_WRITE);
@@ -185,30 +164,6 @@ void CheckForCalibration() {
     inputString = "";
   }
 }
-
-void CheckForHeartBeat(long irValue) {
-  if (checkForBeat(irValue) == true)
-  {
-    //We sensed a beat!
-    long delta = millis() - lastBeat;
-    lastBeat = millis();
-
-    beatsPerMinute = 60 / (delta / 1000.0);
-
-    if (beatsPerMinute < 255 && beatsPerMinute > 20)
-    {
-      rates[rateSpot++] = (byte)beatsPerMinute; //Store this reading in the array
-      rateSpot %= RATE_SIZE; //Wrap variable
-
-      //Take average of readings
-      beatAvg = 0;
-      for (byte x = 0 ; x < RATE_SIZE ; x++)
-        beatAvg += rates[x];
-      beatAvg /= RATE_SIZE;
-    }
-  }
-}
-
 
 void Write(String toWrite, String sensor)
 {

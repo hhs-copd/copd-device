@@ -42,7 +42,7 @@ typedef union accel_t_gyro_union
     int16_t x_accel;int16_t y_accel;int16_t z_accel;int16_t temperature;int16_t x_gyro;int16_t y_gyro;int16_t z_gyro;
   } value;
 };
-
+accel_t_gyro_union accel_t_gyro; 
 
 
 
@@ -102,6 +102,15 @@ void setup(void)
   if ( ble.isVersionAtLeast(MINIMUM_FIRMWARE_VERSION) ) ble.sendCommandCheckOK("AT+HWModeLED=" MODE_LED_BEHAVIOUR); // Change Mode LED Activity // LED Activity command is only supported from 0.6.6
   ble.setMode(BLUEFRUIT_MODE_DATA); // Set module to DATA mode
 
+
+  //Initialiseer IMU
+  int error;
+  uint8_t c;
+  error = MPU6050_read (MPU6050_WHO_AM_I, &c, 1); 
+  error = MPU6050_read (MPU6050_PWR_MGMT_1, &c, 1);
+  MPU6050_write_reg (MPU6050_PWR_MGMT_1, 0);
+
+
   //initialiseer stretch sensor
   Serial.println("Initialising Stretch Sensor");
   inputString.reserve(5);
@@ -114,6 +123,7 @@ void loop(void)
     lastcheck = millis();
     Time = RTC.now().unixtime();
     CheckForCalibration();
+    ReadMPU();
     Serial.println("Bluetooth connected: " + String(ble.isConnected()));
     if (ble.isConnected()) SendDataViaBluetooth();
     else WriteDataToSdCard();
@@ -124,6 +134,12 @@ void loop(void)
 void WriteDataToSdCard() {
   LOGLN("Bezig met naar kaart");
   Write(String(analogRead(REKPIN)), "Thorax circumference");
+  Write(String(accel_t_gyro.value.x_gyro), "Gyro-X");
+  Write(String(accel_t_gyro.value.y_gyro), "Gyro-Y");
+  Write(String(accel_t_gyro.value.z_gyro), "Gyro-Z");
+  Write(String(accel_t_gyro.value.x_accel), "Accelerometer-X");
+  Write(String(accel_t_gyro.value.y_accel), "Accelerometer-Y");
+  Write(String(accel_t_gyro.value.z_accel), "Accelerometer-Z");
   logfile.flush();
 }
 
@@ -150,12 +166,52 @@ void SendDataViaBluetooth() {
     }
     LOGLN("Bezig met live");
     Time = RTC.now().unixtime();
+    ble.print(Time + ",Gyro-X," + String(accel_t_gyro.value.x_gyro) + '\n');
+    ble.print(Time + ",Gyro-Y," + String(accel_t_gyro.value.y_gyro) + '\n');
+    ble.print(Time + ",Gyro-Z," + String(accel_t_gyro.value.z_gyro) + '\n');
+    LOG(Time + ",Gyro-X," + String(accel_t_gyro.value.x_gyro) + '\n');
+    LOG(Time + ",Gyro-Y," + String(accel_t_gyro.value.y_gyro) + '\n');
+    LOG(Time + ",Gyro-Z," + String(accel_t_gyro.value.z_gyro) + '\n');
+    ble.print(Time + ",Accelerometer-X," + String(accel_t_gyro.value.x_accel) + '\n');
+    ble.print(Time + ",Accelerometer-Y," + String(accel_t_gyro.value.y_accel) + '\n');
+    ble.print(Time + ",Accelerometer-Z," + String(accel_t_gyro.value.z_accel) + '\n');
+    LOG(Time + ",Accelerometer-X," + String(accel_t_gyro.value.x_accel) + '\n');
+    LOG(Time + ",Accelerometer-Y," + String(accel_t_gyro.value.y_accel) + '\n');
+    LOG(Time + ",Accelerometer-Z," + String(accel_t_gyro.value.z_accel) + '\n');
     ble.print(Time + ",Thorax circumference," + String(analogRead(REKPIN)) + '\n');
     LOG(Time + ",Thorax circumference," + String(analogRead(REKPIN)) + '\n');
     delay(1000);
   }
   SD.open(filename, FILE_WRITE);
 }
+
+
+void ReadMPU(){
+  int error;
+  double dT;
+  // Read the raw values.
+  // Read 14 bytes at once,
+  // containing acceleration, temperature and gyro.
+  // With the default settings of the MPU-6050,
+  // there is no filter enabled, and the values
+  // are not very stable.
+  error = MPU6050_read (MPU6050_ACCEL_XOUT_H, (uint8_t *) &accel_t_gyro, sizeof(accel_t_gyro));
+  // Swap all high and low bytes.
+  // After this, the registers values are swapped,
+  // so the structure name like x_accel_l does no
+  // longer contain the lower byte.
+  uint8_t swap;
+  #define SWAP(x,y) swap = x; x = y; y = swap
+ 
+  SWAP (accel_t_gyro.reg.x_accel_h, accel_t_gyro.reg.x_accel_l);
+  SWAP (accel_t_gyro.reg.y_accel_h, accel_t_gyro.reg.y_accel_l);
+  SWAP (accel_t_gyro.reg.z_accel_h, accel_t_gyro.reg.z_accel_l);
+  SWAP (accel_t_gyro.reg.t_h, accel_t_gyro.reg.t_l);
+  SWAP (accel_t_gyro.reg.x_gyro_h, accel_t_gyro.reg.x_gyro_l);
+  SWAP (accel_t_gyro.reg.y_gyro_h, accel_t_gyro.reg.y_gyro_l);
+  SWAP (accel_t_gyro.reg.z_gyro_h, accel_t_gyro.reg.z_gyro_l);
+}
+
 
 
 void CheckForCalibration() {
@@ -175,4 +231,59 @@ void Write(String toWrite, String sensor)
   logfile.print(',' + sensor + ',');
   logfile.print(toWrite);
   logfile.println();
+}
+
+int MPU6050_read(int start, uint8_t *buffer, int size)
+{
+  int i, n, error;
+ 
+  Wire.beginTransmission(MPU6050_I2C_ADDRESS);
+  n = Wire.write(start);
+  if (n != 1)
+    return (-10);
+ 
+  n = Wire.endTransmission(false);    // hold the I2C-bus
+  if (n != 0)
+    return (n);
+ 
+  // Third parameter is true: relase I2C-bus after data is read.
+  Wire.requestFrom(MPU6050_I2C_ADDRESS, size, true);
+  i = 0;
+  while(Wire.available() && i<size)
+  {
+    buffer[i++]=Wire.read();
+  }
+  if ( i != size)
+    return (-11);
+ 
+  return (0);  // return : no error
+}
+ 
+int MPU6050_write(int start, const uint8_t *pData, int size)
+{
+  int n, error;
+ 
+  Wire.beginTransmission(MPU6050_I2C_ADDRESS);
+  n = Wire.write(start);        // write the start address
+  if (n != 1)
+    return (-20);
+ 
+  n = Wire.write(pData, size);  // write data bytes
+  if (n != size)
+    return (-21);
+ 
+  error = Wire.endTransmission(true); // release the I2C-bus
+  if (error != 0)
+    return (error);
+ 
+  return (0);         // return : no error
+}
+ 
+int MPU6050_write_reg(int reg, uint8_t data)
+{
+  int error;
+ 
+  error = MPU6050_write(reg, &data, 1);
+ 
+  return (error);
 }

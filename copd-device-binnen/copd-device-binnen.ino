@@ -24,9 +24,9 @@ unsigned long millisdisconnected = 0;
 
 //Stretch sensor libraries en objecten
 #include "Stretch.h"
-#define REKPIN A8
+#define REKPIN A7
 String inputString = "";
-StretchSensor S(REKPIN);
+//StretchSensor S(REKPIN);
 
 //IMU libraries en objecten
 #include "Registers.h"
@@ -89,7 +89,7 @@ void setup(void)
   if (!logfile) error("couldnt create file");
   LOG(F("Logging to: "));
   LOGLN(filename);
-  analogReference(EXTERNAL);
+  //analogReference(EXTERNAL);
 
   //Initialiseer Bluetooth
   Serial.println("Initialising Bluetooth module");
@@ -114,6 +114,7 @@ void setup(void)
   //initialiseer stretch sensor
   Serial.println("Initialising Stretch Sensor");
   inputString.reserve(5);
+  pinMode(REKPIN, INPUT);
   //S.calibrate();
 }
 
@@ -134,12 +135,12 @@ void loop(void)
 void WriteDataToSdCard() {
   LOGLN("Bezig met naar kaart");
   Write(String(analogRead(REKPIN)), "Thorax circumference");
-  Write(String(accel_t_gyro.value.x_gyro), "Gyro-X");
-  Write(String(accel_t_gyro.value.y_gyro), "Gyro-Y");
-  Write(String(accel_t_gyro.value.z_gyro), "Gyro-Z");
-  Write(String(accel_t_gyro.value.x_accel), "Accelerometer-X");
-  Write(String(accel_t_gyro.value.y_accel), "Accelerometer-Y");
-  Write(String(accel_t_gyro.value.z_accel), "Accelerometer-Z");
+  Write(String(accel_t_gyro.value.x_gyro), "GyroX");
+  Write(String(accel_t_gyro.value.y_gyro), "GyroY");
+  Write(String(accel_t_gyro.value.z_gyro), "GyroZ");
+  Write(String(accel_t_gyro.value.x_accel), "AccelerometerX");
+  Write(String(accel_t_gyro.value.y_accel), "AccelerometerY");
+  Write(String(accel_t_gyro.value.z_accel), "AccelerometerZ");
   logfile.flush();
 }
 
@@ -166,20 +167,21 @@ void SendDataViaBluetooth() {
     }
     LOGLN("Bezig met live");
     Time = RTC.now().unixtime();
-    ble.print(Time + ",Gyro-X," + String(accel_t_gyro.value.x_gyro) + '\n');
-    ble.print(Time + ",Gyro-Y," + String(accel_t_gyro.value.y_gyro) + '\n');
-    ble.print(Time + ",Gyro-Z," + String(accel_t_gyro.value.z_gyro) + '\n');
-    LOG(Time + ",Gyro-X," + String(accel_t_gyro.value.x_gyro) + '\n');
-    LOG(Time + ",Gyro-Y," + String(accel_t_gyro.value.y_gyro) + '\n');
-    LOG(Time + ",Gyro-Z," + String(accel_t_gyro.value.z_gyro) + '\n');
-    ble.print(Time + ",Accelerometer-X," + String(accel_t_gyro.value.x_accel) + '\n');
-    ble.print(Time + ",Accelerometer-Y," + String(accel_t_gyro.value.y_accel) + '\n');
-    ble.print(Time + ",Accelerometer-Z," + String(accel_t_gyro.value.z_accel) + '\n');
-    LOG(Time + ",Accelerometer-X," + String(accel_t_gyro.value.x_accel) + '\n');
-    LOG(Time + ",Accelerometer-Y," + String(accel_t_gyro.value.y_accel) + '\n');
-    LOG(Time + ",Accelerometer-Z," + String(accel_t_gyro.value.z_accel) + '\n');
-    ble.print(Time + ",Thorax circumference," + String(analogRead(REKPIN)) + '\n');
-    LOG(Time + ",Thorax circumference," + String(analogRead(REKPIN)) + '\n');
+    ble.print(Time + ",GyroX," + String(accel_t_gyro.value.x_gyro) + '\n');
+    ble.print(Time + ",GyroY," + String(accel_t_gyro.value.y_gyro) + '\n');
+    ble.print(Time + ",GyroZ," + String(accel_t_gyro.value.z_gyro) + '\n');
+    LOG(Time + ",GyroX," + String(accel_t_gyro.value.x_gyro) + '\n');
+    LOG(Time + ",GyroY," + String(accel_t_gyro.value.y_gyro) + '\n');
+    LOG(Time + ",GyroZ," + String(accel_t_gyro.value.z_gyro) + '\n');
+    ble.print(Time + ",AccelerometerX," + String(accel_t_gyro.value.x_accel) + '\n');
+    ble.print(Time + ",AccelerometerY," + String(accel_t_gyro.value.y_accel) + '\n');
+    ble.print(Time + ",AccelerometerZ," + String(accel_t_gyro.value.z_accel) + '\n');
+    LOG(Time + ",AccelerometerX," + String(accel_t_gyro.value.x_accel) + '\n');
+    LOG(Time + ",AccelerometerY," + String(accel_t_gyro.value.y_accel) + '\n');
+    LOG(Time + ",AccelerometerZ," + String(accel_t_gyro.value.z_accel) + '\n');
+    String thorax = String(analogRead(REKPIN));
+    ble.print(Time + ",Thorax circumference," + thorax + '\n');
+    LOG(Time + ",Thorax circumference," + thorax + '\n');
     delay(1000);
   }
   SD.open(filename, FILE_WRITE);
@@ -216,7 +218,7 @@ void ReadMPU(){
 
 void CheckForCalibration() {
   if (inputString == "&c") {
-    S.calibrate();
+    //S.calibrate();
     inputString = "";
   }
 }

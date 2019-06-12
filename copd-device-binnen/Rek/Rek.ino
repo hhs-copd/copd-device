@@ -1,6 +1,6 @@
 #include "Stretch.h"
 
-#define REKPIN A0
+#define REKPIN A8
 
 String inputString = "";
 StretchSensor S(REKPIN);

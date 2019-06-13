@@ -24,9 +24,11 @@ unsigned long millisdisconnected = 0;
 
 //Stretch sensor libraries en objecten
 #include "Stretch.h"
-#define REKPIN A7
+#define REKPIN A8
 String inputString = "";
-//StretchSensor S(REKPIN);
+int low;
+int high;
+int scale;
 
 //IMU libraries en objecten
 #include "Registers.h"
@@ -34,15 +36,16 @@ typedef union accel_t_gyro_union
 {
   struct
   {
-    uint8_t x_accel_h;uint8_t x_accel_l;uint8_t y_accel_h;uint8_t y_accel_l;uint8_t z_accel_h;uint8_t z_accel_l;uint8_t t_h;
-    uint8_t t_l;uint8_t x_gyro_h;uint8_t x_gyro_l;uint8_t y_gyro_h;uint8_t y_gyro_l;uint8_t z_gyro_h;uint8_t z_gyro_l;
-    } reg;
+    uint8_t x_accel_h; uint8_t x_accel_l; uint8_t y_accel_h; uint8_t y_accel_l; uint8_t z_accel_h; uint8_t z_accel_l; uint8_t t_h;
+    uint8_t t_l; uint8_t x_gyro_h; uint8_t x_gyro_l; uint8_t y_gyro_h; uint8_t y_gyro_l; uint8_t z_gyro_h; uint8_t z_gyro_l;
+  } reg;
   struct
   {
-    int16_t x_accel;int16_t y_accel;int16_t z_accel;int16_t temperature;int16_t x_gyro;int16_t y_gyro;int16_t z_gyro;
+    int16_t x_accel; int16_t y_accel; int16_t z_accel; int16_t temperature; int16_t x_gyro; int16_t y_gyro; int16_t z_gyro;
   } value;
 };
-accel_t_gyro_union accel_t_gyro; 
+accel_t_gyro_union accel_t_gyro;
+int loopcount = 0;
 
 
 
@@ -104,23 +107,19 @@ void setup(void)
 
 
   //Initialiseer IMU
-  int error;
-  uint8_t c;
-  error = MPU6050_read (MPU6050_WHO_AM_I, &c, 1); 
-  error = MPU6050_read (MPU6050_PWR_MGMT_1, &c, 1);
-  MPU6050_write_reg (MPU6050_PWR_MGMT_1, 0);
+  Init_imu();
 
 
   //initialiseer stretch sensor
   Serial.println("Initialising Stretch Sensor");
   inputString.reserve(5);
   pinMode(REKPIN, INPUT);
-  //S.calibrate();
+  Calibrate();
 }
 
 void loop(void)
 {
-  if (millis() - lastcheck >= 500) {
+  if (millis() - lastcheck >= 1000) {
     lastcheck = millis();
     Time = RTC.now().unixtime();
     CheckForCalibration();
@@ -128,13 +127,17 @@ void loop(void)
     Serial.println("Bluetooth connected: " + String(ble.isConnected()));
     if (ble.isConnected()) SendDataViaBluetooth();
     else WriteDataToSdCard();
+    loopcount++;
+  }
+  if(loopcount >= 60){
+    Init_imu(); //imu opnieuw initialiseren om verkeerde waardes te voorkomen.
   }
 }
 
 
 void WriteDataToSdCard() {
   LOGLN("Bezig met naar kaart");
-  Write(String(analogRead(REKPIN)), "Thorax circumference");
+  Write(String(ReadStretchSensor()), "Thorax circumference");
   Write(String(accel_t_gyro.value.x_gyro), "GyroX");
   Write(String(accel_t_gyro.value.y_gyro), "GyroY");
   Write(String(accel_t_gyro.value.z_gyro), "GyroZ");
@@ -179,7 +182,7 @@ void SendDataViaBluetooth() {
     LOG(Time + ",AccelerometerX," + String(accel_t_gyro.value.x_accel) + '\n');
     LOG(Time + ",AccelerometerY," + String(accel_t_gyro.value.y_accel) + '\n');
     LOG(Time + ",AccelerometerZ," + String(accel_t_gyro.value.z_accel) + '\n');
-    String thorax = String(analogRead(REKPIN));
+    String thorax = String(ReadStretchSensor());
     ble.print(Time + ",Thorax circumference," + thorax + '\n');
     LOG(Time + ",Thorax circumference," + thorax + '\n');
     delay(1000);
@@ -188,7 +191,7 @@ void SendDataViaBluetooth() {
 }
 
 
-void ReadMPU(){
+void ReadMPU() {
   int error;
   double dT;
   // Read the raw values.
@@ -203,8 +206,8 @@ void ReadMPU(){
   // so the structure name like x_accel_l does no
   // longer contain the lower byte.
   uint8_t swap;
-  #define SWAP(x,y) swap = x; x = y; y = swap
- 
+#define SWAP(x,y) swap = x; x = y; y = swap
+
   SWAP (accel_t_gyro.reg.x_accel_h, accel_t_gyro.reg.x_accel_l);
   SWAP (accel_t_gyro.reg.y_accel_h, accel_t_gyro.reg.y_accel_l);
   SWAP (accel_t_gyro.reg.z_accel_h, accel_t_gyro.reg.z_accel_l);
@@ -238,54 +241,93 @@ void Write(String toWrite, String sensor)
 int MPU6050_read(int start, uint8_t *buffer, int size)
 {
   int i, n, error;
- 
+
   Wire.beginTransmission(MPU6050_I2C_ADDRESS);
   n = Wire.write(start);
   if (n != 1)
     return (-10);
- 
+
   n = Wire.endTransmission(false);    // hold the I2C-bus
   if (n != 0)
     return (n);
- 
+
   // Third parameter is true: relase I2C-bus after data is read.
   Wire.requestFrom(MPU6050_I2C_ADDRESS, size, true);
   i = 0;
-  while(Wire.available() && i<size)
+  while (Wire.available() && i < size)
   {
-    buffer[i++]=Wire.read();
+    buffer[i++] = Wire.read();
   }
   if ( i != size)
     return (-11);
- 
+
   return (0);  // return : no error
 }
- 
+
 int MPU6050_write(int start, const uint8_t *pData, int size)
 {
   int n, error;
- 
+
   Wire.beginTransmission(MPU6050_I2C_ADDRESS);
   n = Wire.write(start);        // write the start address
   if (n != 1)
     return (-20);
- 
+
   n = Wire.write(pData, size);  // write data bytes
   if (n != size)
     return (-21);
- 
+
   error = Wire.endTransmission(true); // release the I2C-bus
   if (error != 0)
     return (error);
- 
+
   return (0);         // return : no error
 }
- 
+
 int MPU6050_write_reg(int reg, uint8_t data)
 {
   int error;
- 
+
   error = MPU6050_write(reg, &data, 1);
- 
+
   return (error);
+}
+
+void Calibrate() {
+  pinMode(13, OUTPUT);
+  digitalWrite(13, HIGH);
+  delay(500);
+  digitalWrite(13, LOW);
+  delay(500);
+  digitalWrite(13, HIGH);
+  delay(500);
+  digitalWrite(13, LOW);
+  delay(500);
+  digitalWrite(13, HIGH);
+  delay(500);
+  digitalWrite(13, LOW);
+  delay(500);
+  digitalWrite(13, HIGH);
+  delay(500);
+  digitalWrite(13, LOW);
+  delay(500);
+  digitalWrite(13, HIGH);
+  delay(500);
+  digitalWrite(13, LOW);
+  delay(500);
+  low = analogRead(REKPIN);
+}
+
+int ReadStretchSensor(){
+  int val = analogRead(REKPIN) - low; 
+  if(val <0) return 0;
+  else return val;  
+}
+
+void Init_imu(){
+  int error;
+  uint8_t c;
+  error = MPU6050_read (MPU6050_WHO_AM_I, &c, 1);
+  error = MPU6050_read (MPU6050_PWR_MGMT_1, &c, 1);
+  MPU6050_write_reg (MPU6050_PWR_MGMT_1, 0);
 }

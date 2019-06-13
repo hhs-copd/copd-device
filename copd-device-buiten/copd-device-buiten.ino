@@ -25,6 +25,7 @@ fijnstof f1;
 VEML v1;
 si7021 s1;
 GPS g1;
+unsigned long buzz = 0;
 
 enum SaveSendState
 {
@@ -81,6 +82,7 @@ void loop() {
     }
     Time = millis();
   }
+  CheckPMValues();
 }
 
 void WriteDataToSdCard() {
@@ -215,6 +217,18 @@ void SendDataViaBluetooth() {
       SDLoggerDeleteFile();
     }
     SendData();
+    CheckPMValues();
   }
   SDLoggerSetWrite();
+}
+
+void CheckPMValues() {
+  if (f1.PM1p0 >= 10 || f1.PM2p5 >= 10 || f1.PM4p0 >= 10 || f1.PM10p0 >= 10) {
+    if (buzz == 0 || millis() - buzz >=30000) {
+      tone(31, 440, 1000);
+      delay(1500);
+      tone(31, 440, 1000);
+      buzz = millis();
+    }
+  }
 }
